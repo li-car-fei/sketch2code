@@ -1,3 +1,8 @@
+# 更改部分说明
+
+仅在`sever.py`中进行少量代码更改，包括适配高版本pytorch依赖，接口逻辑与前端适配
+
+
 # Sketch2code
 
 ![Preview](https://github.com/ashnkumar/sketch-code/blob/master/header_image.png)

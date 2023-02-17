@@ -10,7 +10,7 @@ from utils import *
 from model import *
 from inference.Compiler import *
 
-UPLOAD_FOLDER = '/app/uploads'
+UPLOAD_FOLDER = './uploads/'
 ALLOWED_EXTENSIONS = set([
     'png'
     ])
@@ -37,7 +37,7 @@ def upload_file():
         # check if the post request has the file part
 
         if 'file' not in request.files:
-            flash('No file part')
+            flash('No file post')
             return redirect(request.url)
         file = request.files['file']
 
@@ -49,13 +49,16 @@ def upload_file():
             return redirect(request.url)
         if file and allowed_file(file.filename):
             filename = secure_filename(file.filename)
-            file.save(os.path.join(app.config['UPLOAD_FOLDER'],
-                      filename))
+            # basepath = os.path.dirname(__file__)  # 当前文件所在路径
+            # upload_path = os.path.join(basepath, 'uploads', filename)  # 保存地址
+            # file.save(upload_path)
+            file.save(app.config['UPLOAD_FOLDER'] + filename)
             encoder, decoder = load_model()
             star_text = '<START>'
             hidden = decoder.init_hidden()
-            image = resize_img(os.path.join(app.config['UPLOAD_FOLDER'],
-                      filename))
+            # image = resize_img(os.path.join(app.config['UPLOAD_FOLDER'],
+            #           filename))
+            image = resize_img(app.config['UPLOAD_FOLDER'] + filename)
             image = Variable(torch.FloatTensor([image]))
             predicted = '<START> '
             for di in range(9999):
@@ -67,16 +70,22 @@ def upload_file():
                 ni = topi[0][0][0]
                 word = word_for_id(ni)
                 if word is None:
-                        continue
+                    continue
                 predicted += word + ' '
                 star_text = word
-                print(predicted)
+                # print(predicted)
                 if word == '<END>':
-                        break
-            compiler = Compiler('default')
-            compiled_website = compiler.compile(predicted.split())
+                    break
+            # 序列得到html代码
+            # compiler = Compiler('default')
+            # compiled_website = compiler.compile(predicted.split())
+            # return compiled_website
 
-            return compiled_website
+            compile_arr = [a for a in predicted.split()[1:-1] if a is not ',']
+            print(compile_arr)
+            return ' '.join(compile_arr)
+
+
     return '''
     <!doctype html>
     <title>Upload new File</title>
@@ -89,12 +98,26 @@ def upload_file():
 def load_model():
     encoder = torch.load('model_weights/encoder_resnet34_0.061650436371564865.pt')
     decoder = torch.load('model_weights/decoder_resnet34_0.061650436371564865.pt')
+    for i, (name, module) in enumerate(encoder._modules.items()):
+        module = recursion_change_bn(encoder)
+    encoder.resnet._modules['8'] = nn.AvgPool2d(kernel_size=7, stride=1, padding=0)
+    encoder.eval()
+    for i, (name, module) in enumerate(decoder._modules.items()):
+        module = recursion_change_bn(decoder)
+    decoder.eval()
     return encoder, decoder
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() \
         in ALLOWED_EXTENSIONS
 
+def recursion_change_bn(module):
+    if isinstance(module, torch.nn.BatchNorm2d):
+        module.track_running_stats = 1
+    else:
+        for i, (name, module1) in enumerate(module._modules.items()):
+            module1 = recursion_change_bn(module1)
+    return module
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
